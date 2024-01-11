@@ -5,10 +5,11 @@ import pvfalcon
 import json
 
 def record_audio():
+    # Records audio using FFmpeg and saves it as a WAV file
     today = datetime.datetime.now().strftime('%Y%m%d')
     audio_file = f"./{today}.wav"
     subprocess.run([
-        "ffmpeg", "-f", "avfoundation", "-i", ":Emir’s AirPods Pro",
+        "ffmpeg", "-f", "avfoundation", "-i", ":YOUR_INPUT_SOURCE",
         "-ar", "16000",  # Set sample rate to 16 kHz
         "-ac", "1",      # Set audio to mono
         "-t", "15",      # Record for 15 seconds
@@ -17,8 +18,10 @@ def record_audio():
     return audio_file
 
 def transcribe_audio(audio_file):
+    # Transcribes the audio using Whisper
     subprocess.run(["whisper", audio_file, "--model", "medium", "--language", "English"], check=True)
     json_output = f"{audio_file.rsplit('.', 1)[0]}.json"
+    # Display macOS notification when transcription is complete
     subprocess.run(["osascript", "-e", 'display notification "Whisper Transcription Complete!" with title "Whisper AI"'])
     if not os.path.exists(json_output):
         raise FileNotFoundError(f"The file {json_output} was not created by Whisper.")
@@ -27,13 +30,15 @@ def transcribe_audio(audio_file):
     return transcription
 
 def perform_diarization(audio_file, access_key):
+    # Applies Falcon's speaker diarization on the audio file
     falcon = pvfalcon.create(access_key=access_key)
     segments = falcon.process_file(audio_file)
-    falcon.delete()
-    subprocess.run(["osascript", "-e", 'display notification "Falcon Diarization Complete!" with title "Falcon AI"'])
-    
-    return segments
+    falcon.delete() # Clean up Falcon instance after processing
+    # Display macOS notification when diarization is complete
+    subprocess.run(["osascript", "-e", 'display notification "Falcon Diarization Complete!" with title "Falcon AI"']) 
+
 def merge_transcripts(transcription, diarization, overlap_threshold=0.2):
+    # Merges transcripts from Whisper and diarization data from Falcon
     merged_output = []
     used_transcript_segments = set()
 
@@ -61,7 +66,7 @@ def merge_transcripts(transcription, diarization, overlap_threshold=0.2):
                 })
                 used_transcript_segments.add(part['id'])
 
-    # Sort and merge close segments
+ # Sort and merge close segments
     merged_output.sort(key=lambda x: (x['speaker'], x['start']))
     final_output = []
     for seg in merged_output:
@@ -72,18 +77,15 @@ def merge_transcripts(transcription, diarization, overlap_threshold=0.2):
             final_output.append(seg)
 
     return final_output
-
 def main():
-    access_key = "01Qbu3lPruanfLbozZgehd8JjvmFrfPP1E9sTQxuS1j1nM1w++5kCQ=="
+    access_key = "YOUR_FALCON_ACCESS_KEY" # Replace with your actual Falcon access key
     audio_file = record_audio()
     transcription = transcribe_audio(audio_file)
     diarization = perform_diarization(audio_file, access_key)
     merged_output = merge_transcripts(transcription, diarization)
-
-    # Print formatted merged output
+    # Print the final output with speaker tags and timestamps
     for m in merged_output:
         print(f"{m['speaker']} [{m['start']:.2f}-{m['end']:.2f}] {m['text'].strip()}")
-
     os.remove(audio_file)  # Clean up the audio file
 
 if __name__ == "__main__":
